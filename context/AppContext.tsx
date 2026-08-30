@@ -40,7 +40,12 @@ type AppContextValue = {
   setPassengers: (value: number) => void;
   selectRide: (ride: Ride) => void;
   toggleSeat: (seat: string) => void;
-  confirmBooking: () => Booking;
+  /**
+   * Records the booking the server just made, so the home and journey screens
+   * can show it without waiting on a refetch. The reference comes from the
+   * API — inventing one locally would print a number the backend never issued.
+   */
+  confirmBooking: (details?: { reference?: string; seats?: string[] }) => Booking;
   setAppearance: (value: Appearance) => void;
   saveRegistration: (value: DriverRegistration) => void;
 };
@@ -58,6 +63,22 @@ function todayLabel() {
 
 function bookingReference() {
   return `CHL-${Math.floor(10000 + Math.random() * 89999)}`;
+}
+
+/**
+ * The seat a rider most likely wants: the lowest-numbered one still free.
+ *
+ * Preselecting a taken seat means the picker opens on a seat the server will
+ * refuse, which reads as a bug the first time someone taps Continue.
+ */
+function firstFreeSeat(ride: Ride): string[] {
+  const total = ride.vehicle?.seats || 4;
+  const taken = new Set(ride.takenSeats ?? []);
+  for (let seat = 1; seat <= total; seat += 1) {
+    const label = String(seat);
+    if (!taken.has(label)) return [label];
+  }
+  return [];
 }
 
 function bookingDate() {
@@ -88,11 +109,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const confirmBooking = () => {
+  const confirmBooking = (details?: { reference?: string; seats?: string[] }) => {
     const next = {
-      reference: bookingReference(),
+      reference: details?.reference || bookingReference(),
       ride: selectedRide,
-      seats: selectedSeats,
+      seats: details?.seats ?? selectedSeats,
       date: bookingDate(),
     };
     setBooking(next);
@@ -113,7 +134,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => ({
     from, to, date, passengers, selectedRide, selectedSeats, booking, appearance, registration,
     setFrom, setTo, setDate, setPassengers,
-    selectRide: (ride: Ride) => { setSelectedRide(ride); setSelectedSeats(['2']); },
+    selectRide: (ride: Ride) => { setSelectedRide(ride); setSelectedSeats(firstFreeSeat(ride)); },
     toggleSeat: (seat: string) => setSelectedSeats((current) => current.includes(seat) ? current.filter((item) => item !== seat) : [...current, seat]),
     confirmBooking,
     setAppearance: updateAppearance,

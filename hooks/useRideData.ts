@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { api, API_CONFIGURED } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, API_CONFIGURED, type ApiBooking } from '@/lib/api';
 import { toCity, toRide, type LiveRide } from '@/lib/adapters';
 import { cities as bundledCities, type City } from '@/data/mock';
 
@@ -62,18 +62,53 @@ export function useRideSearch(params: RideSearchParams, enabled = true) {
   };
 }
 
-export function useMyBookings() {
+export function useMyBookings(enabled = true) {
   const query = useQuery({
     queryKey: ['bookings'],
     queryFn: ({ signal }) => api.bookings(signal),
-    enabled: API_CONFIGURED,
+    enabled: enabled && API_CONFIGURED,
     staleTime: 30 * 1000,
   });
 
   return {
-    bookings: query.data ?? [],
+    bookings: (query.data ?? []) as ApiBooking[],
     isLoading: query.isLoading,
+    isRefetching: query.isRefetching,
     error: query.error as Error | null,
     refetch: query.refetch,
+    unconfigured: !API_CONFIGURED,
   };
+}
+
+/**
+ * Books seats on a ride.
+ *
+ * The server owns the reference, the price and the seat check, so the response
+ * — not the local guess that preceded it — is what the confirmation renders.
+ * Both the booking list and the ride search are invalidated on success: the
+ * ride the rider just took a seat on now has one fewer.
+ */
+export function useCreateBooking() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ rideId, seats }: { rideId: number; seats: string[] }) =>
+      api.createBooking(rideId, seats),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['rides'] });
+    },
+  });
+}
+
+export function useCancelBooking() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (bookingId: number) => api.cancelBooking(bookingId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['rides'] });
+    },
+  });
 }

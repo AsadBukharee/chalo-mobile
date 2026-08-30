@@ -44,6 +44,11 @@ export class ApiError extends Error {
 
 /** Turns a DRF error body into one sentence a person can act on. */
 function describe(status: number, body: unknown): ApiError {
+  // 401 always means the same thing here, and the server's own words for it
+  // are SimpleJWT's ("Given token not valid for any token type") — accurate,
+  // and meaningless to a rider whose Firebase token simply aged out.
+  if (status === 401) return new ApiError('Your session has expired. Please sign in again.', status);
+
   if (body && typeof body === 'object') {
     const record = body as Record<string, unknown>;
 
@@ -60,7 +65,6 @@ function describe(status: number, body: unknown): ApiError {
     if (first) return new ApiError(first, status, fields);
   }
 
-  if (status === 401) return new ApiError('Please sign in again.', status);
   if (status >= 500) return new ApiError('The server had a problem. Try again shortly.', status);
   return new ApiError(`Request failed (${status}).`, status);
 }
@@ -213,6 +217,8 @@ export type ApiRide = {
   price_per_seat: string;
   total_seats: number;
   seats_left: number;
+  /** Seat labels already booked, e.g. ["1", "3"]. */
+  taken_seats: string[];
   status: string;
   is_recommended: boolean;
 };
@@ -316,6 +322,18 @@ export const api = {
 
   myDriverApplication: (signal?: AbortSignal) =>
     request<unknown>('/api/drivers/me/', { signal }),
+
+  /**
+   * The driver's phone number, for someone on this ride.
+   *
+   * Not in the ride payload: a driver's mobile in every search result is a
+   * phone list waiting to be scraped. 403 for anyone without a live booking.
+   */
+  rideContact: (rideId: number, signal?: AbortSignal) =>
+    request<{ name: string; phone: string; vehicle: string; plate: string }>(
+      `/api/rides/${rideId}/contact/`,
+      { signal },
+    ),
 
   /** Where the vehicle is now. 404 until the driver has shared a position. */
   rideLocation: (rideId: number, signal?: AbortSignal) =>

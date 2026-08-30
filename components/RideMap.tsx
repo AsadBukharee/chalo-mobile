@@ -22,6 +22,7 @@ import { useRideRoute, type RideRoute } from './maps/useRideRoute';
 import type { RouteLegKind } from './maps/types';
 import * as haptics from './haptics';
 import { acquireScrollLock, releaseScrollLock } from './scrollLock';
+import { rideWaypoints } from './routeData';
 import type { Ride } from '@/data/mock';
 import { useColors, useIsDark } from '@/hooks/useColors';
 import { useDeviceLocation } from '@/hooks/useDeviceLocation';
@@ -338,12 +339,19 @@ function JourneySegments({
     arrival: colors.routeGreen,
   };
 
-  const total = route.legs.reduce((sum, leg) => sum + leg.distanceMeters, 0) || 1;
+  // A ride whose driver has not pinned a separate pickup produces legs of zero
+  // length. Showing them gives a tappable "0 m" column that zooms to nothing.
+  const drawable = route.legs.filter(
+    (leg) => leg.distanceMeters > 0 && leg.coordinates.length > 1,
+  );
+  const total = drawable.reduce((sum, leg) => sum + leg.distanceMeters, 0) || 1;
+
+  if (!drawable.length) return null;
 
   return (
     <View style={styles.segmentBlock}>
       <View style={styles.segmentRow}>
-        {route.legs.map((leg) => {
+        {drawable.map((leg) => {
           const share = leg.distanceMeters / total;
           const active = focusedLeg === leg.kind;
           const dimmed = focusedLeg !== null && !active;
@@ -435,15 +443,28 @@ export function RideMapPreview({
   ride,
   mode = 'route',
   rideApiId = null,
+  vehicle: suppliedVehicle,
 }: {
   ride: Ride;
   mode?: RideMapMode;
   /** Numeric API id, when this ride came from the server. Enables tracking. */
   rideApiId?: number | null;
+  /**
+   * A vehicle position supplied by the caller.
+   *
+   * Passing this (even as null) turns off the internal poller: the live
+   * tracking screen already follows the ride for its own readouts, and two
+   * pollers on one endpoint means twice the requests and two markers a few
+   * seconds out of step with each other.
+   */
+  vehicle?: { latitude: number; longitude: number; heading?: number | null } | null;
 }) {
   const colors = useColors();
   const { width, height } = useWindowDimensions();
-  const { route, status, reason, refresh } = useRideRoute(ride.id, {
+  // The ride's own coordinates, not a lookup keyed by its id. Memoised because
+  // the hook re-fetches whenever these change.
+  const waypoints = useMemo(() => rideWaypoints(ride), [ride]);
+  const { route, status, reason, refresh } = useRideRoute(ride.id, waypoints, {
     refreshMs: mode === 'journey' ? 120000 : 0,
   });
   const mapRef = useRef<InteractiveRideMapHandle | null>(null);
@@ -471,8 +492,19 @@ export function RideMapPreview({
   // Live positions, but only on a journey — a route preview has no vehicle to
   // follow and no reason to ask for the location permission.
   const live = mode === 'journey';
-  const { vehicle } = useRideTracking(rideApiId, live);
+  const owned = suppliedVehicle === undefined;
+  const { vehicle: polled } = useRideTracking(rideApiId, live && owned);
   const { position: rider } = useDeviceLocation({ enabled: live });
+
+  const marker = owned
+    ? polled?.isLive
+      ? {
+          latitude: polled.latitude,
+          longitude: polled.longitude,
+          heading: polled.headingDegrees,
+        }
+      : null
+    : (suppliedVehicle ?? null);
 
   const openActivity = useCallback(() => {
     haptics.press();
@@ -545,15 +577,7 @@ export function RideMapPreview({
           interactive={explore}
           showTraffic={traffic}
           vehicleProgress={progress}
-          vehiclePosition={
-            vehicle?.isLive
-              ? {
-                  latitude: vehicle.latitude,
-                  longitude: vehicle.longitude,
-                  heading: vehicle.headingDegrees,
-                }
-              : null
-          }
+          vehiclePosition={marker}
           riderPosition={rider ? { latitude: rider.latitude, longitude: rider.longitude } : null}
           testID="interactive-ride-map"
           // While exploring, a tap belongs to the map, not to navigation.
@@ -662,7 +686,10 @@ export function RideMapActivity({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { route, status, reason, refresh } = useRideRoute(ride.id, {
+  // The ride's own coordinates, not a lookup keyed by its id. Memoised because
+  // the hook re-fetches whenever these change.
+  const waypoints = useMemo(() => rideWaypoints(ride), [ride]);
+  const { route, status, reason, refresh } = useRideRoute(ride.id, waypoints, {
     refreshMs: mode === 'journey' ? 120000 : 0,
   });
   const mapRef = useRef<InteractiveRideMapHandle | null>(null);

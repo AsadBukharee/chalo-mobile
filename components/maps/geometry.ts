@@ -156,3 +156,161 @@ export function formatClock(date: Date) {
   const display = hours % 12 === 0 ? 12 : hours % 12;
   return `${display}:${String(minutes).padStart(2, '0')} ${suffix}`;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Following a vehicle along a route                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Cumulative distance to each point of a path, so later lookups are a binary
+ * search instead of a walk.
+ *
+ * Built once per route. Without it, moving the vehicle marker ten times a
+ * second over a 1,500-point motorway polyline means ~15,000 haversines every
+ * second, which is how a live map turns a phone into a hand warmer.
+ */
+export type PathIndex = {
+  points: LatLng[];
+  /** cumulative[i] is the distance in metres from points[0] to points[i]. */
+  cumulative: number[];
+  totalMeters: number;
+};
+
+export function indexPath(points: LatLng[]): PathIndex {
+  const cumulative: number[] = new Array(points.length);
+  let total = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    if (index > 0) total += distanceBetween(points[index - 1]!, points[index]!);
+    cumulative[index] = total;
+  }
+  return { points, cumulative, totalMeters: total };
+}
+
+/** The index of the last point at or before `meters`. */
+function segmentAt(index: PathIndex, meters: number): number {
+  const { cumulative } = index;
+  let low = 0;
+  let high = cumulative.length - 1;
+  while (low < high) {
+    const mid = (low + high + 1) >> 1;
+    if (cumulative[mid]! <= meters) low = mid;
+    else high = mid - 1;
+  }
+  return low;
+}
+
+/** Position and heading a given distance along the path. */
+export function pointAtDistance(
+  index: PathIndex,
+  meters: number,
+): { position: LatLng; heading: number } | null {
+  const { points, cumulative, totalMeters } = index;
+  if (points.length === 0) return null;
+  if (points.length === 1) return { position: points[0]!, heading: 0 };
+
+  const target = Math.min(Math.max(meters, 0), totalMeters);
+  const i = segmentAt(index, target);
+  const start = points[i]!;
+  const end = points[Math.min(i + 1, points.length - 1)]!;
+  const spanStart = cumulative[i]!;
+  const span = (cumulative[Math.min(i + 1, points.length - 1)] ?? spanStart) - spanStart;
+  const ratio = span === 0 ? 0 : (target - spanStart) / span;
+
+  return {
+    position: {
+      latitude: start.latitude + (end.latitude - start.latitude) * ratio,
+      longitude: start.longitude + (end.longitude - start.longitude) * ratio,
+    },
+    heading: start === end ? 0 : bearingBetween(start, end),
+  };
+}
+
+/**
+ * Where a GPS fix falls on the route.
+ *
+ * A phone's position is never exactly on the polyline — it is a few metres off
+ * the centreline at best, and a few hundred under a flyover. Projecting onto
+ * the route is what turns a scatter of fixes into "142 km travelled, 43 to
+ * go", and what stops the marker from drifting into the fields beside the
+ * motorway.
+ *
+ * `offRouteMeters` is how far the fix was from the road. A large value is the
+ * honest signal that the vehicle is not on this route at all — a detour, a
+ * wrong turn, or a stale fix — and the caller can stop pretending otherwise.
+ */
+export type PathProjection = {
+  /** Distance from the start of the path, in metres. */
+  distanceAlong: number;
+  /** How far the raw fix sat from the path. */
+  offRouteMeters: number;
+  /** The fix snapped onto the path. */
+  position: LatLng;
+  fraction: number;
+};
+
+export function projectOntoPath(index: PathIndex, point: LatLng): PathProjection | null {
+  const { points, cumulative, totalMeters } = index;
+  if (points.length === 0) return null;
+  if (points.length === 1) {
+    return {
+      distanceAlong: 0,
+      offRouteMeters: distanceBetween(points[0]!, point),
+      position: points[0]!,
+      fraction: 0,
+    };
+  }
+
+  // Plane geometry in degrees, with longitude squashed by cos(latitude) so a
+  // degree east is the same size as a degree north. Over a segment a few
+  // hundred metres long the error against a proper geodesic projection is
+  // centimetres, and it is an order of magnitude cheaper.
+  const latScale = Math.cos(toRad(point.latitude)) || 1;
+  let best: { index: number; ratio: number; distSq: number } | null = null;
+
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const ax = (a.longitude - point.longitude) * latScale;
+    const ay = a.latitude - point.latitude;
+    const bx = (b.longitude - point.longitude) * latScale;
+    const by = b.latitude - point.latitude;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+
+    const ratio = lenSq === 0 ? 0 : Math.min(1, Math.max(0, -(ax * dx + ay * dy) / lenSq));
+    const px = ax + dx * ratio;
+    const py = ay + dy * ratio;
+    const distSq = px * px + py * py;
+
+    if (!best || distSq < best.distSq) best = { index: i, ratio, distSq };
+  }
+
+  if (!best) return null;
+
+  const a = points[best.index - 1]!;
+  const b = points[best.index]!;
+  const position: LatLng = {
+    latitude: a.latitude + (b.latitude - a.latitude) * best.ratio,
+    longitude: a.longitude + (b.longitude - a.longitude) * best.ratio,
+  };
+  const distanceAlong =
+    cumulative[best.index - 1]! + distanceBetween(a, position);
+
+  return {
+    distanceAlong,
+    offRouteMeters: distanceBetween(point, position),
+    position,
+    fraction: totalMeters === 0 ? 0 : distanceAlong / totalMeters,
+  };
+}
+
+/** Shortest signed turn from one heading to another, in degrees (-180..180]. */
+export function headingDelta(from: number, to: number) {
+  return ((((to - from) % 360) + 540) % 360) - 180;
+}
+
+/** Rotates `from` toward `to` the short way round, for smooth marker turns. */
+export function lerpHeading(from: number, to: number, t: number) {
+  return (from + headingDelta(from, to) * t + 360) % 360;
+}

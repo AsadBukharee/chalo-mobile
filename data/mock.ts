@@ -32,6 +32,21 @@ export type Vehicle = {
 
 export type Ride = {
   id: string;
+  /** The server's numeric id. Absent on the bundled sample rides. */
+  apiId?: number;
+  /** Seat labels already booked, e.g. ["1", "3"]. Absent means unknown. */
+  takenSeats?: string[];
+  /**
+   * Where this ride actually goes.
+   *
+   * The API has always sent these; the app used to drop them on the floor and
+   * draw every ride with one hard-coded demo polyline instead. Optional
+   * because the bundled sample rides carry their geometry in routeData.ts.
+   */
+  originCoord?: { lat: number; lng: number };
+  destinationCoord?: { lat: number; lng: number };
+  pickupCoord?: { lat: number; lng: number };
+  dropoffCoord?: { lat: number; lng: number };
   from: string;
   to: string;
   departure: string;

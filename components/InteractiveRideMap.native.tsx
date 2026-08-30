@@ -271,7 +271,12 @@ function InteractiveRideMapNative(
           <React.Fragment key={leg.kind}>
             {/* A soft casing for contrast against the map, then a thin core.
                 Four stacked strokes at 14pt read as a highlighter smear; two
-                thin ones read as a road. */}
+                thin ones read as a road.
+
+                The short pickup and arrival hops are dashed, the way every map
+                app draws a connecting leg. It is the cheapest way to make the
+                three segments legible as three different things rather than
+                one line that changes colour for no visible reason. */}
             <Polyline
               coordinates={leg.coordinates}
               strokeColor={isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.92)'}
@@ -287,6 +292,7 @@ function InteractiveRideMapNative(
               strokeWidth={active ? 5 : 3.5}
               lineCap="round"
               lineJoin="round"
+              lineDashPattern={leg.kind === 'journey' ? undefined : [10, 7]}
               tappable={false}
               zIndex={active ? 5 : 2}
             />

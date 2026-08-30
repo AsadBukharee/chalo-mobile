@@ -37,6 +37,13 @@ type AuthContextValue = {
   profile: ApiUser | null;
   /** True when this sign-in created the account, so the UI can onboard. */
   isNewAccount: boolean;
+  /**
+   * Play the confetti: a rider we already knew has just signed back in.
+   *
+   * Only a fresh sign-in sets this. A session Firebase restored from disk at
+   * launch is not a moment — nobody wants a party every time they open the app.
+   */
+  celebrate: boolean;
   /** Set once the welcome screen has been shown and dismissed. */
   hasWelcomed: boolean;
   /** Non-null when the API could not be reached after a successful sign-in. */
@@ -59,6 +66,8 @@ type AuthContextValue = {
   refreshProfile: () => Promise<void>;
   /** Saves the name a new rider typed and marks the welcome as done. */
   completeWelcome: (fullName?: string) => Promise<void>;
+  /** Stops the confetti — the screen has had its moment. */
+  endCelebration: () => void;
   signOut: () => Promise<void>;
   getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
 };
@@ -105,7 +114,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [autoCode, setAutoCode] = useState<string | null>(null);
+  const [celebrate, setCelebrate] = useState(false);
   const confirmation = useRef<PhoneConfirmation | null>(null);
+
+  // Firebase fires onAuthStateChanged once at launch to report the restored
+  // session, then again on every real change. Only the later ones are a person
+  // signing in, and the flag has to be a ref because loadSession reads it in
+  // the same tick the state update is still queued.
+  const seenInitialAuthState = useRef(false);
+  const hadUser = useRef(false);
+  const freshSignIn = useRef(false);
 
   useEffect(() => {
     if (!firebaseAuth.available) {
@@ -113,12 +131,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     return firebaseAuth.onAuthStateChanged((next) => {
+      const restoring = !seenInitialAuthState.current;
+      seenInitialAuthState.current = true;
+      // A sign-in is a transition into a user that is not the launch restore.
+      // Android's SMS auto-retrieval signs in without confirmCode ever being
+      // called, so this has to be derived here rather than set by the caller.
+      freshSignIn.current = !restoring && !!next && !hadUser.current;
+      hadUser.current = !!next;
+
       setUser(next);
       setInitialising(false);
       if (next) {
         confirmation.current = null;
         setPendingPhone(null);
       } else {
+        setCelebrate(false);
         setProfile(null);
         setIsNewAccount(false);
         setHasWelcomed(false);
@@ -141,9 +168,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(result.user);
       setIsNewAccount(result.created);
       setProfileError(null);
-      // A returning rider with a name already on file has nothing to fill in,
-      // so there is no welcome step to complete.
-      if (!result.created && result.user.full_name) setHasWelcomed(true);
+
+      // Who sees the welcome screen, and why:
+      //
+      //   just signed in      -> always, because that is the moment. A new
+      //                          rider is asked their name; a returning one is
+      //                          greeted by it and sent on.
+      //   restored at launch  -> only if there is still a name to collect.
+      //                          Nobody wants a greeting every cold start.
+      const needsName = !result.user.full_name.trim();
+      if (!needsName && !freshSignIn.current) setHasWelcomed(true);
+
+      // Confetti for the rider we already knew. A brand-new account gets its
+      // own celebration once the name is in, not before.
+      setCelebrate(!result.created && freshSignIn.current);
     } catch (caught) {
       // ApiError already carries a sentence worth showing; anything else gets
       // a generic one rather than a stack trace in the UI.
@@ -248,7 +286,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setHasWelcomed(true);
     setIsNewAccount(false);
+    setCelebrate(false);
+    freshSignIn.current = false;
   }, []);
+
+  const endCelebration = useCallback(() => setCelebrate(false), []);
 
   const signOut = useCallback(async () => {
     confirmation.current = null;
@@ -273,6 +315,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
     setHasWelcomed(false);
     setIsNewAccount(false);
+    setCelebrate(false);
+    freshSignIn.current = false;
+    hadUser.current = false;
   }, [pushToken]);
 
   const status: AuthStatus = initialising
@@ -289,6 +334,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       profile,
       isNewAccount,
+      celebrate,
       hasWelcomed,
       profileError,
       autoCode,
@@ -302,6 +348,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelCode,
       refreshProfile: loadSession,
       completeWelcome,
+      endCelebration,
       signOut,
       getIdToken: firebaseAuth.getIdToken,
     }),
@@ -310,6 +357,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       profile,
       isNewAccount,
+      celebrate,
       hasWelcomed,
       profileError,
       autoCode,
@@ -322,6 +370,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelCode,
       loadSession,
       completeWelcome,
+      endCelebration,
       signOut,
     ],
   );

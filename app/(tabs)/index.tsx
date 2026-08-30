@@ -3,18 +3,54 @@ import { router } from 'expo-router';
 import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useApp } from '@/context/AppContext';
-import { popularRoutes, trips } from '@/data/mock';
+import { useAuth } from '@/context/AuthContext';
+import { popularRoutes } from '@/data/mock';
 import { Avatar, Logo, Pill, RouteVisual, Screen, SectionHeader } from '@/components/ChaloUI';
 import * as haptics from '@/components/haptics';
 import { useColors } from '@/hooks/useColors';
+import { useMyBookings } from '@/hooks/useRideData';
+import { toRide } from '@/lib/adapters';
 
 export default function HomeScreen() {
   const colors = useColors();
   const { from, to, date, passengers, booking, selectRide, setFrom, setTo } = useApp();
+  const { profile } = useAuth();
+  const { bookings } = useMyBookings();
   const routeColors = [colors.accent, colors.greenSoft, colors.cream];
 
-  /** Prefer a real booking; otherwise show the seeded upcoming trip. */
+  /**
+   * The next journey this rider actually has.
+   *
+   * Read from the API rather than from the booking cached at confirmation
+   * time, so it survives a reinstall and is right on a second device. The
+   * cached one is the fallback for the seconds between confirming and the
+   * list refetching, and there is deliberately no seeded demo trip behind
+   * either: a card promising a ride nobody booked is worse than no card.
+   */
   const upcoming = useMemo(() => {
+    const next = bookings
+      .filter(
+        (item) =>
+          item.status !== 'cancelled' &&
+          new Date(item.ride.departs_at).getTime() > Date.now(),
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.ride.departs_at).getTime() - new Date(b.ride.departs_at).getTime(),
+      )[0];
+
+    if (next) {
+      return {
+        ride: toRide(next.ride),
+        when: new Date(next.ride.departs_at).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: 'short',
+        }),
+        seats: next.seats.length,
+        badge: 'BOOKED',
+      };
+    }
+
     if (booking) {
       return {
         ride: booking.ride,
@@ -23,11 +59,8 @@ export default function HomeScreen() {
         badge: 'BOOKED',
       };
     }
-    const seeded = trips.find((trip) => trip.status === 'upcoming');
-    return seeded
-      ? { ride: seeded.ride, when: seeded.date, seats: seeded.seats.length, badge: 'UP NEXT' }
-      : null;
-  }, [booking]);
+    return null;
+  }, [bookings, booking]);
 
   const openTrip = () => {
     if (!upcoming) return;
@@ -54,7 +87,7 @@ export default function HomeScreen() {
             { backgroundColor: colors.secondary, opacity: pressed ? 0.7 : 1 },
           ]}
         >
-          <Avatar initials="AS" size={32} />
+          <Avatar initials={profileInitials(profile?.display_name)} size={32} />
         </Pressable>
       </View>
 
@@ -322,6 +355,16 @@ export default function HomeScreen() {
       </Pressable>
     </Screen>
   );
+}
+
+/** "Asad Abbas" → "AA"; a bare phone number → a neutral mark, not letters. */
+function profileInitials(name?: string | null): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter((part) => /^[A-Za-z]/.test(part));
+  if (!parts.length) return '·';
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join('');
 }
 
 const styles = StyleSheet.create({

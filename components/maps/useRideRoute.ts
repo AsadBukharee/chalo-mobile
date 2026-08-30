@@ -8,7 +8,7 @@ import {
   type LatLng,
   type LatLngBounds,
 } from './geometry';
-import { getRoutePoints } from '../routeData';
+import type { RideWaypoints } from '../routeData';
 
 export type RouteLeg = {
   kind: RouteLegKind;
@@ -39,12 +39,24 @@ const toLatLng = (point: { lat: number; lng: number }): LatLng => ({
   longitude: point.lng,
 });
 
-/** Straight-line geometry from the bundled data, used before/without network. */
-function offlineRoute(rideId: string): RideRoute {
-  const points = getRoutePoints(rideId).map(toLatLng);
+/**
+ * Straight-line geometry, drawn immediately so the map is never blank while
+ * the road route is being fetched.
+ *
+ * Built from the ride's own waypoints — previously it came from a bundled
+ * table keyed by ride id, which silently produced the same demo line for every
+ * ride the server sent.
+ */
+function offlineRoute(rideId: string, waypoints: RideWaypoints): RideRoute {
+  const points = [
+    waypoints.rider,
+    waypoints.pickup,
+    waypoints.dropoff,
+    waypoints.destination,
+  ].map(toLatLng);
   const pickup = points.slice(0, 2);
-  const journey = points.slice(1, -1);
-  const arrival = points.slice(-2);
+  const journey = points.slice(1, 3);
+  const arrival = points.slice(2);
   const makeLeg = (kind: RouteLegKind, coordinates: LatLng[]): RouteLeg => {
     const distanceMeters = pathLength(coordinates);
     return {
@@ -111,7 +123,68 @@ function toRideRoute(payload: RawRoutePayload): RideRoute {
   };
 }
 
+/**
+ * A route with no geometry, for a ride we have no coordinates for.
+ *
+ * Returned rather than null so every consumer keeps its existing shape: the
+ * map draws nothing, the readouts show zeroes, and the degraded banner
+ * explains why. Making the hook nullable would push a null check into every
+ * line of two large screens to say the same thing.
+ */
+function emptyRoute(rideId: string): RideRoute {
+  const nowhere: LatLng = { latitude: 0, longitude: 0 };
+  return {
+    rideId,
+    source: 'offline',
+    legs: [],
+    coordinates: [],
+    journeyCoordinates: [],
+    waypoints: { rider: nowhere, pickup: nowhere, dropoff: nowhere, destination: nowhere },
+    bounds: { south: 0, west: 0, north: 0, east: 0 },
+    distanceMeters: 0,
+    durationSeconds: 0,
+    durationInTrafficSeconds: null,
+    trafficDelaySeconds: 0,
+  };
+}
+
 const routeCache = new Map<string, RideRoute>();
+
+/**
+ * Fetches in flight, so two components asking for the same route share one.
+ *
+ * The live tracking screen needs the route for its distance maths and the map
+ * needs it to draw. Both mount together with a cold cache, and each leg is a
+ * billed Routes request — without this, every journey screen costs six calls
+ * instead of three.
+ */
+const inFlight = new Map<string, Promise<RawRoutePayload | null>>();
+
+function loadRoute(key: string, rideId: string, waypoints: RideWaypoints, signal?: AbortSignal) {
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+  // Deliberately not passing `signal`: one subscriber unmounting must not
+  // cancel the request the other is still waiting on. Each caller drops its
+  // own result instead.
+  const promise = fetchRoute(rideId, waypoints).finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+  return promise;
+}
+
+/**
+ * A stable dependency for a waypoint object that is rebuilt on every render.
+ *
+ * Without this the load effect re-runs forever: `rideWaypoints(ride)` returns
+ * a fresh object each time, so an object identity in the dependency list means
+ * a new fetch on every render.
+ */
+function waypointsKey(waypoints: RideWaypoints | null): string {
+  if (!waypoints) return 'none';
+  const { rider, pickup, dropoff, destination } = waypoints;
+  return [rider, pickup, dropoff, destination]
+    .map((point) => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`)
+    .join('|');
+}
 
 /**
  * Loads road-following route geometry for a ride.
@@ -120,9 +193,18 @@ const routeCache = new Map<string, RideRoute>();
  * blank, then swaps in the real Directions geometry when it arrives. Refreshes
  * periodically so the traffic-aware ETA stays current.
  */
-export function useRideRoute(rideId: string, options?: { refreshMs?: number }) {
+export function useRideRoute(
+  rideId: string,
+  /** Null when this ride has no coordinates at all — nothing to draw. */
+  waypoints: RideWaypoints | null,
+  options?: { refreshMs?: number },
+) {
   const refreshMs = options?.refreshMs ?? 0;
-  const [route, setRoute] = useState<RideRoute>(() => routeCache.get(rideId) ?? offlineRoute(rideId));
+  const [route, setRoute] = useState<RideRoute>(
+    () =>
+      routeCache.get(rideId) ??
+      (waypoints ? offlineRoute(rideId, waypoints) : emptyRoute(rideId)),
+  );
   const [status, setStatus] = useState<'loading' | 'ready' | 'degraded'>(
     routeCache.has(rideId) ? 'ready' : 'loading',
   );
@@ -139,9 +221,14 @@ export function useRideRoute(rideId: string, options?: { refreshMs?: number }) {
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
+      if (!waypoints) {
+        setReason('This ride has no map coordinates yet.');
+        setStatus('degraded');
+        return;
+      }
       try {
-        const payload = await fetchRoute(rideId, signal);
-        if (!mounted.current) return;
+        const payload = await loadRoute(`${rideId}:${waypointsKey(waypoints)}`, rideId, waypoints);
+        if (!mounted.current || signal?.aborted) return;
         if (!payload) {
           setReason('No route service reachable.');
           setStatus('degraded');
@@ -166,12 +253,13 @@ export function useRideRoute(rideId: string, options?: { refreshMs?: number }) {
         setStatus('degraded');
       }
     },
-    [rideId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rideId, waypointsKey(waypoints)],
   );
 
   useEffect(() => {
     const cached = routeCache.get(rideId);
-    setRoute(cached ?? offlineRoute(rideId));
+    setRoute(cached ?? (waypoints ? offlineRoute(rideId, waypoints) : emptyRoute(rideId)));
     setReason(null);
     setStatus(cached ? 'ready' : 'loading');
 

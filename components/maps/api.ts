@@ -5,6 +5,7 @@ import {
   proxyUrl,
 } from './config';
 import { fetchDirectPlaces, fetchDirectRoute, type PlacePrediction } from './directions';
+import type { RideWaypoints } from '../routeData';
 import type { RawRoutePayload } from './types';
 
 export type { PlacePrediction };
@@ -20,8 +21,12 @@ export type { RawRouteLeg, RawRoutePayload, RouteLegKind } from './types';
  * Underneath this is the Routes API and Places API (New); the legacy Directions
  * and Places endpoints cannot be enabled on this project at all.
  */
-export async function fetchRoute(rideId: string, signal?: AbortSignal) {
-  if (CAN_CALL_GOOGLE_DIRECTLY) return fetchDirectRoute(rideId, signal);
+export async function fetchRoute(
+  rideId: string,
+  waypoints: RideWaypoints,
+  signal?: AbortSignal,
+) {
+  if (CAN_CALL_GOOGLE_DIRECTLY) return fetchDirectRoute(rideId, waypoints, signal);
 
   const url = proxyUrl(`/maps/route?ride=${encodeURIComponent(rideId)}`);
   if (!url) return null;

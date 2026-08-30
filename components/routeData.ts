@@ -1,6 +1,22 @@
 import type { MapRegion } from './InteractiveRideMap.types';
+import type { Ride } from '@/data/mock';
 
 export type GeoPoint = { lat: number; lng: number };
+
+/**
+ * The four points a ride's map is drawn from, in travel order.
+ *
+ * `rider` is where the trip starts for the passenger (the origin city, until
+ * the device's own position is wired in), `pickup` and `dropoff` are the
+ * driver's actual meeting points, and `destination` is the far city. The three
+ * coloured segments on the journey card are the gaps between them.
+ */
+export type RideWaypoints = {
+  rider: GeoPoint;
+  pickup: GeoPoint;
+  dropoff: GeoPoint;
+  destination: GeoPoint;
+};
 
 export const routePoints: Record<string, GeoPoint[]> = {
   'ride-ahmed': [
@@ -41,8 +57,52 @@ export const routePoints: Record<string, GeoPoint[]> = {
   ],
 };
 
+/**
+ * Bundled geometry for one of the four sample rides.
+ *
+ * Returns an empty list for anything else. It used to fall back to
+ * `routePoints['ride-ahmed']`, which meant every ride that came from the
+ * server — all of which have ids like `ride-7` — silently drew the same
+ * Faisalabad-to-Lahore line, and fed those same coordinates to the Routes API
+ * so the road geometry was real but for entirely the wrong journey. A route
+ * for a ride we have no geometry for is not a route.
+ */
 export function getRoutePoints(rideId: string): GeoPoint[] {
-  return routePoints[rideId] ?? routePoints['ride-ahmed'];
+  return routePoints[rideId] ?? [];
+}
+
+/**
+ * The waypoints for a ride, preferring the coordinates the server sent.
+ *
+ * Falls back to the bundled sample geometry, and then to null — at which point
+ * the map says it has no route rather than drawing a confident wrong one.
+ * A ride whose driver has not pinned a pickup still maps fine: the city centre
+ * stands in, and the zero-length leg is skipped rather than drawn.
+ */
+export function rideWaypoints(ride: Ride): RideWaypoints | null {
+  const origin = ride.originCoord;
+  const destination = ride.destinationCoord;
+
+  if (origin && destination) {
+    return {
+      rider: origin,
+      pickup: ride.pickupCoord ?? origin,
+      dropoff: ride.dropoffCoord ?? destination,
+      destination,
+    };
+  }
+
+  const bundled = getRoutePoints(ride.id);
+  if (bundled.length >= 4) {
+    return {
+      rider: bundled[0]!,
+      pickup: bundled[1]!,
+      dropoff: bundled[bundled.length - 2]!,
+      destination: bundled[bundled.length - 1]!,
+    };
+  }
+
+  return null;
 }
 
 export function getRouteRegion(points: GeoPoint[]): MapRegion {

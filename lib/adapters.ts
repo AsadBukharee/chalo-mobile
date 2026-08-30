@@ -34,6 +34,25 @@ function duration(minutes: number): string {
   return `${hours}h ${rest}m`;
 }
 
+/**
+ * A coordinate pair, or undefined when the server had none.
+ *
+ * DRF serialises DecimalField as a string, and null for an unset one. 0,0 is
+ * treated as missing too: it is in the Gulf of Guinea, not Pakistan, and is
+ * what a half-filled row looks like.
+ */
+function point(
+  latitude: string | null | undefined,
+  longitude: string | null | undefined,
+): { lat: number; lng: number } | undefined {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+  if (lat === 0 && lng === 0) return undefined;
+  return { lat, lng };
+}
+
+
 export function toCity(city: ApiCity): City {
   return {
     name: city.name,
@@ -79,6 +98,11 @@ export function toRide(ride: ApiRide): LiveRide {
   return {
     apiId: ride.id,
     id: `ride-${ride.id}`,
+    takenSeats: ride.taken_seats ?? [],
+    originCoord: point(ride.origin.latitude, ride.origin.longitude),
+    destinationCoord: point(ride.destination.latitude, ride.destination.longitude),
+    pickupCoord: point(ride.pickup_latitude, ride.pickup_longitude),
+    dropoffCoord: point(ride.dropoff_latitude, ride.dropoff_longitude),
     from: ride.origin.name,
     to: ride.destination.name,
     departure: clock(ride.departs_at),

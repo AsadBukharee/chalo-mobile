@@ -1,7 +1,7 @@
 import { distanceBetween, type LatLng } from './geometry';
 import { searchPlaces } from './places';
 import { computeRoute, RoutesError } from './routes';
-import { getRoutePoints } from '../routeData';
+import type { RideWaypoints } from '../routeData';
 import type { RawRouteLeg, RawRoutePayload, RouteLegKind } from './types';
 
 /**
@@ -21,20 +21,13 @@ export class DirectionsError extends Error {
   }
 }
 
-/** The bundled points use a fixed shape: you, pickup, …motorway…, drop-off, destination. */
-export function waypointsFor(rideId: string) {
-  const points = getRoutePoints(rideId).map((point) => ({
-    latitude: point.lat,
-    longitude: point.lng,
-  }));
-  return {
-    rider: points[0]!,
-    pickup: points[1]!,
-    dropoff: points[points.length - 2]!,
-    destination: points[points.length - 1]!,
-    all: points,
-  };
-}
+const toLatLng = (point: { lat: number; lng: number }): LatLng => ({
+  latitude: point.lat,
+  longitude: point.lng,
+});
+
+/** Two points close enough that a road route between them is meaningless. */
+const SAME_SPOT_METRES = 60;
 
 async function leg(
   origin: LatLng,
@@ -42,6 +35,20 @@ async function leg(
   kind: RouteLegKind,
   signal?: AbortSignal,
 ): Promise<RawRouteLeg> {
+  // A driver who has not pinned a separate pickup makes the first leg a point.
+  // Asking Google to route from a place to itself costs a billed request and
+  // returns nothing worth drawing, so answer it here.
+  if (distanceBetween(origin, destination) < SAME_SPOT_METRES) {
+    return {
+      kind,
+      polyline: '',
+      distanceMeters: 0,
+      durationSeconds: 0,
+      durationInTrafficSeconds: null,
+      summary: '',
+    };
+  }
+
   const route = await computeRoute(origin, destination, signal);
 
   // Routes gives a traffic-aware duration and a static one; the difference is
@@ -74,9 +81,15 @@ function boundsOfPairs(points: LatLng[]) {
  */
 export async function fetchDirectRoute(
   rideId: string,
+  points: RideWaypoints,
   signal?: AbortSignal,
 ): Promise<RawRoutePayload> {
-  const waypoints = waypointsFor(rideId);
+  const waypoints = {
+    rider: toLatLng(points.rider),
+    pickup: toLatLng(points.pickup),
+    dropoff: toLatLng(points.dropoff),
+    destination: toLatLng(points.destination),
+  };
 
   let legs: RawRouteLeg[];
   try {
@@ -93,6 +106,8 @@ export async function fetchDirectRoute(
     throw new DirectionsError(message);
   }
 
+  // Legs that were skipped as zero-length carry no geometry; they stay in the
+  // list so the three-segment UI keeps its shape, but contribute nothing.
   const durationSeconds = legs.reduce((sum, item) => sum + item.durationSeconds, 0);
   const durationInTraffic = legs.every((item) => item.durationInTrafficSeconds !== null)
     ? legs.reduce((sum, item) => sum + (item.durationInTrafficSeconds ?? 0), 0)
@@ -112,7 +127,12 @@ export async function fetchDirectRoute(
         lng: waypoints.destination.longitude,
       },
     },
-    bounds: boundsOfPairs(waypoints.all),
+    bounds: boundsOfPairs([
+      waypoints.rider,
+      waypoints.pickup,
+      waypoints.dropoff,
+      waypoints.destination,
+    ]),
     distanceMeters: legs.reduce((sum, item) => sum + item.distanceMeters, 0),
     durationSeconds,
     durationInTrafficSeconds: durationInTraffic,
