@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "679249635487",
+    "project_id": "chalo-intercity",
+    "storage_bucket": "chalo-intercity.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:679249635487:android:6c6b5ec2363183b8399aaa",
+        "android_client_info": {
+          "package_name": "com.asadnaqvee.chalomobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDRgXl4kD_GfoV5hmyDTLj2Fml7IRVSS0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

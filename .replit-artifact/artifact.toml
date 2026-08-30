@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "Chalo"
+description = "A polished Pakistani intercity ride-booking mobile app for discovering, comparing, booking, and tracking seats in cars traveling between cities, powered by realistic local mock data."
+version = "1.0.0"
+id = "artifacts/chalo-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 22027
+
+[services.development]
+run = "pnpm --filter @workspace/chalo-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/chalo-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/chalo-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "22027"
+BASE_PATH = "/"

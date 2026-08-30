@@ -1,0 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Header, Screen } from '@/components/ChaloUI';
+import { useApp } from '@/context/AppContext';
+import { useColors } from '@/hooks/useColors';
+
+export default function VehicleScreen() {
+  const colors = useColors();
+  const { selectedRide: ride } = useApp();
+  const vehicle = ride.vehicle;
+  return <Screen><Header title="Vehicle details" subtitle="Your ride for this journey" back onBack={() => router.back()} /><View style={[styles.hero, { backgroundColor: colors.secondary }]}><Ionicons name="car-sport-outline" size={88} color={colors.charcoal} /><View style={[styles.verified, { backgroundColor: colors.greenSoft }]}><Ionicons name="checkmark-circle" size={14} color={colors.green} /><Text style={[styles.verifiedText, { color: colors.green }]}>Vehicle verified</Text></View></View><Text style={[styles.title, { color: colors.charcoal }]}>{vehicle.make} {vehicle.model}</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{vehicle.year} · {vehicle.color}</Text><View style={styles.facts}>{[['Seats', `${vehicle.seats} passenger seats`], ['Plate', vehicle.plate], ['Comfort', 'Premium interior']].map(([label, value]) => <View key={label} style={[styles.fact, { borderBottomColor: colors.border }]}><Text style={[styles.label, { color: colors.mutedForeground }]}>{label}</Text><Text style={[styles.value, { color: colors.charcoal }]}>{value}</Text></View>)}</View><Text style={[styles.section, { color: colors.charcoal }]}>What’s included</Text><View style={styles.features}>{vehicle.features.map((feature) => <View key={feature} style={[styles.feature, { backgroundColor: colors.card, borderColor: colors.border }]}><Ionicons name="checkmark" size={15} color={colors.green} /><Text style={[styles.featureText, { color: colors.charcoal }]}>{feature}</Text></View>)}</View></Screen>;
+}
+const styles = StyleSheet.create({ hero: { height: 180, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 22 }, verified: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 6, position: 'absolute', bottom: 14 }, verifiedText: { fontFamily: 'Inter_600SemiBold', fontSize: 10 }, title: { fontFamily: 'Inter_700Bold', fontSize: 24 }, subtitle: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 5 }, facts: { marginTop: 23, marginBottom: 27 }, fact: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1 }, label: { fontFamily: 'Inter_400Regular', fontSize: 12 }, value: { fontFamily: 'Inter_600SemiBold', fontSize: 12 }, section: { fontFamily: 'Inter_700Bold', fontSize: 16, marginBottom: 11 }, features: { gap: 9 }, feature: { borderWidth: 1, borderRadius: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 9 }, featureText: { fontFamily: 'Inter_500Medium', fontSize: 13 } });

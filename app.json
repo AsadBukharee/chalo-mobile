@@ -1,0 +1,84 @@
+{
+  "expo": {
+    "name": "Chalo",
+    "slug": "chalo-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/chalo-icon.png",
+    "scheme": "chalo-mobile",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/chalo-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F6F1E7"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.asadnaqvee.chalomobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Chalo uses your location to centre the map on you and to show how far your pickup point is.",
+        "UIBackgroundModes": ["remote-notification"]
+      }
+    },
+    "android": {
+      "package": "com.asadnaqvee.chalomobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/chalo-icon.png",
+        "backgroundColor": "#F6F1E7"
+      },
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_SMS"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/images/chalo-icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-web-browser",
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          },
+          "android": {
+            "minSdkVersion": 24
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Chalo needs access to your photos so you can upload a picture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Chalo uses your location to centre the map on you and to show how far your pickup point is."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "99099498-295f-4657-9631-d18bdf3d5875"
+      }
+    },
+    "owner": "asadnaqvee"
+  }
+}

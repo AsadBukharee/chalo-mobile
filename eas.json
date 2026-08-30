@@ -1,0 +1,48 @@
+{
+  "cli": {
+    "version": ">= 22.6.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyDQXH01Pi5zbX-4-ti7U4Kx0j8ROHtUB_Q",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "deupmoy95",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "chalo_mobile",
+        "EXPO_PUBLIC_API_BASE_URL": "https://chalo-backend.vercel.app"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyDQXH01Pi5zbX-4-ti7U4Kx0j8ROHtUB_Q",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "deupmoy95",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "chalo_mobile",
+        "EXPO_PUBLIC_API_BASE_URL": "https://chalo-backend.vercel.app"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyDQXH01Pi5zbX-4-ti7U4Kx0j8ROHtUB_Q",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "deupmoy95",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "chalo_mobile",
+        "EXPO_PUBLIC_API_BASE_URL": "https://chalo-backend.vercel.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

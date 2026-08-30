@@ -1,0 +1,18 @@
+import { Ionicons } from '@expo/vector-icons';
+import React, { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Header, Screen } from '@/components/ChaloUI';
+import { notifications } from '@/data/mock';
+import { useColors } from '@/hooks/useColors';
+
+export default function InboxScreen() {
+  const colors = useColors();
+  const [readIds, setReadIds] = useState<string[]>([]);
+  const unreadCount = useMemo(
+    () => notifications.filter((notice) => notice.unread && !readIds.includes(notice.id)).length,
+    [readIds],
+  );
+  const markAllRead = () => setReadIds(notifications.map((notice) => notice.id));
+  return <Screen><Header title="Inbox" subtitle={unreadCount ? `${unreadCount} unread` : 'You are all caught up'} action={unreadCount ? markAllRead : undefined} actionIcon="checkmark-done-outline" actionLabel="Mark all as read" /><View style={[styles.banner, { backgroundColor: colors.inverseSurface }]}><View style={[styles.bannerIcon, { backgroundColor: colors.primary }]}><Ionicons name="notifications-outline" size={19} color={colors.charcoal} /></View><View style={styles.bannerCopy}><Text style={[styles.bannerTitle, { color: colors.inverseForeground }]}>Stay in the loop</Text><Text style={[styles.bannerText, { color: colors.inverseMuted }]}>We’ll let you know when something changes.</Text></View></View>{notifications.map((notice) => { const unread = Boolean(notice.unread) && !readIds.includes(notice.id); return <Pressable key={notice.id} accessibilityRole="button" accessibilityLabel={`${notice.title}. ${notice.body}`} onPress={() => setReadIds((current) => current.includes(notice.id) ? current : [...current, notice.id])} style={({ pressed }) => [styles.notice, { backgroundColor: colors.card, borderColor: unread ? colors.primary : colors.border, opacity: pressed ? 0.85 : 1 }]}><View style={[styles.noticeIcon, { backgroundColor: notice.tone === 'green' ? colors.greenSoft : notice.tone === 'orange' ? colors.accent : colors.secondary }]}><Ionicons name={notice.icon as keyof typeof Ionicons.glyphMap} size={19} color={notice.tone === 'green' ? colors.green : notice.tone === 'orange' ? colors.primary : colors.charcoal} /></View><View style={styles.noticeCopy}><View style={styles.noticeTop}><Text style={[styles.noticeTitle, { color: colors.charcoal }]}>{notice.title}</Text>{unread && <View style={[styles.unread, { backgroundColor: colors.primary }]} />}</View><Text style={[styles.noticeBody, { color: colors.mutedForeground }]}>{notice.body}</Text><Text style={[styles.noticeTime, { color: colors.mutedForeground }]}>{notice.time}</Text></View></Pressable>; })}</Screen>;
+}
+const styles = StyleSheet.create({ banner: { borderRadius: 19, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 22 }, bannerIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, bannerCopy: { flex: 1 }, bannerTitle: { fontFamily: 'Inter_700Bold', fontSize: 13 }, bannerText: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 3 }, notice: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 11, marginBottom: 11 }, noticeIcon: { width: 39, height: 39, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, noticeCopy: { flex: 1 }, noticeTop: { flexDirection: 'row', alignItems: 'center', gap: 7 }, noticeTitle: { fontFamily: 'Inter_700Bold', fontSize: 13 }, unread: { width: 6, height: 6, borderRadius: 3 }, noticeBody: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 17, marginTop: 5 }, noticeTime: { fontFamily: 'Inter_400Regular', fontSize: 10, marginTop: 8 } });

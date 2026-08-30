@@ -1,0 +1,60 @@
+# What EAS uploads when it packages this project.
+#
+# IMPORTANT: when .easignore exists, EAS CLI uses it INSTEAD OF .gitignore —
+# not in addition to it. This file previously listed only four paths, so
+# node_modules/ was never excluded and every build uploaded it: that is the
+# difference between a ~5 MB tarball and a ~177 MB one. Anything that must not
+# be uploaded has to be repeated here even if .gitignore already covers it.
+#
+# EAS installs dependencies itself from package-lock.json, and runs prebuild
+# itself, so none of the following are wanted on the build server.
+
+# Dependencies — the big one
+node_modules/
+
+# Version control and editor cruft
+.git/
+.vscode/
+.idea/
+*.orig.*
+
+# Expo / Metro caches and build output
+.expo/
+.expo-shared/
+dist/
+web-build/
+.metro-health-check*
+expo-env.d.ts
+
+# Native projects: EAS regenerates these with prebuild
+android/
+ios/
+
+# Local secrets and env files — never ship these to the build server
+.env
+.env.*
+!.env.example
+
+# Signing material
+*.jks
+*.p8
+*.p12
+*.key
+*.keystore
+*.mobileprovision
+*.pem
+
+# The leftover Replit web-serving scaffold
+scripts/build.js
+server/
+
+# Logs and OS files
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+.DS_Store
+
+# Anything only used for docs
+docs/
+.replit-artifact/

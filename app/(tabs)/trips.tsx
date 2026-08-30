@@ -1,0 +1,20 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { EmptyState, Header, Pill, RouteVisual, Screen, Segmented } from '@/components/ChaloUI';
+import { trips, Trip } from '@/data/mock';
+import { useApp } from '@/context/AppContext';
+import { useColors } from '@/hooks/useColors';
+
+const tabs = ['Upcoming', 'Active', 'Completed', 'Cancelled'] as const;
+export default function TripsScreen() {
+  const colors = useColors();
+  const { selectRide } = useApp();
+  const [active, setActive] = useState<typeof tabs[number]>('Upcoming');
+  const statusByTab = { Upcoming: 'upcoming', Active: 'active', Completed: 'completed', Cancelled: 'cancelled' } as const;
+  const filtered = trips.filter((trip) => trip.status === statusByTab[active]);
+  const open = (trip: Trip) => { selectRide(trip.ride); router.push(trip.status === 'active' ? '/journey' : '/ride'); };
+  return <Screen><Header title="My trips" subtitle="Every journey, all in one place" action={() => router.push('/travel-options')} actionIcon="calendar-outline" actionLabel="Change travel dates" /><Segmented options={tabs} value={active} onChange={setActive} label="Filter trips by status" />{filtered.length ? filtered.map((trip) => <Pressable key={trip.id} onPress={() => open(trip)} style={[styles.tripCard, { backgroundColor: colors.card, borderColor: colors.border }]}><View style={styles.tripTop}><Pill label={trip.status.toUpperCase()} tone={trip.status === 'cancelled' ? 'neutral' : trip.status === 'active' ? 'green' : 'orange'} /><Text style={[styles.tripDate, { color: colors.mutedForeground }]}>{trip.date} · {trip.ride.departure}</Text></View><View style={styles.routeRow}><RouteVisual from={trip.ride.from} to={trip.ride.to} compact /><View style={styles.routeCopy}><Text style={[styles.route, { color: colors.charcoal }]}>{trip.ride.from} → {trip.ride.to}</Text><Text style={[styles.muted, { color: colors.mutedForeground }]}>{trip.ride.driver.name} · {trip.seats.length} seat</Text></View><Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} /></View><View style={styles.tripActions}><Text style={[styles.reference, { color: colors.mutedForeground }]}>{trip.reference ? `Booking ${trip.reference}` : 'Route details'}</Text><Pressable accessibilityLabel={`Open map for ${trip.ride.from} to ${trip.ride.to}`} testID={`trip-map-${trip.id}`} onPress={() => { selectRide(trip.ride); router.push({ pathname: '/map', params: { ride: trip.ride.id, mode: trip.status === 'active' ? 'journey' : 'route' } }); }} style={[styles.mapAction, { backgroundColor: colors.secondary }]}><Ionicons name="map-outline" size={14} color={colors.charcoal} /><Text style={[styles.mapActionText, { color: colors.charcoal }]}>Map</Text></Pressable></View></Pressable>) : <EmptyState icon="briefcase-outline" title={active === 'Upcoming' ? 'Your next journey starts here' : `No ${active.toLowerCase()} trips`} body={active === 'Upcoming' ? 'Find a comfortable seat and start exploring.' : 'Your trip history will appear here.'} action="Find a ride" onAction={() => router.push('/search')} />}</Screen>;
+}
+const styles = StyleSheet.create({ tripCard: { borderWidth: 1, borderRadius: 19, padding: 15, marginBottom: 12 }, tripTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 }, tripDate: { fontFamily: 'Inter_400Regular', fontSize: 10 }, routeRow: { flexDirection: 'row', alignItems: 'center', gap: 9 }, routeCopy: { flex: 1 }, route: { fontFamily: 'Inter_700Bold', fontSize: 14 }, muted: { fontFamily: 'Inter_400Regular', fontSize: 11, marginTop: 4 }, tripActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }, reference: { fontFamily: 'Inter_400Regular', fontSize: 10 }, mapAction: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 5 }, mapActionText: { fontFamily: 'Inter_600SemiBold', fontSize: 10 } });
